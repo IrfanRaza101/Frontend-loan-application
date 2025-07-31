@@ -40,7 +40,7 @@ import {
   TrendingUp,
   Calculator
 } from "lucide-react";
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/ReduxAuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 const loanSchema = z.object({

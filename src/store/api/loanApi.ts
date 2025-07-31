@@ -181,6 +181,14 @@ export const loanApi = createApi({
       invalidatesTags: ['Notification'],
     }),
 
+    deleteNotification: builder.mutation<any, string>({
+      query: (notificationId) => ({
+        url: `/user/notifications/${notificationId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Notification'],
+    }),
+
     getUserInstallments: builder.query<{ data: { installments: Installment[] } }, { limit?: number }>({
       query: ({ limit = 5 } = {}) => `/user/installments?limit=${limit}`,
       providesTags: ['Installment'],
@@ -199,5 +207,6 @@ export const {
   useGetUserWalletQuery,
   useGetUserNotificationsQuery,
   useMarkNotificationAsReadMutation,
+  useDeleteNotificationMutation,
   useGetUserInstallmentsQuery,
 } = loanApi;

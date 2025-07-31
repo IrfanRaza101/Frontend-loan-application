@@ -33,7 +33,8 @@ import {
   Shield,
   Award,
   Bell,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -42,7 +43,9 @@ import {
   useGetUserWalletQuery,
   useGetUserNotificationsQuery,
   useGetUserInstallmentsQuery,
-  useMarkNotificationAsReadMutation
+  useMarkNotificationAsReadMutation,
+  useDeleteNotificationMutation,
+  useGetLoanStatusQuery
 } from '@/store/api/loanApi';
 import { useAppDispatch } from '@/store/hooks';
 import { addNotification } from '@/store/slices/uiSlice';
@@ -74,6 +77,14 @@ const Dashboard = () => {
   const { user, loanApplications } = useAuth();
   const dispatch = useAppDispatch();
   
+  // RTK Query hooks - Define these first
+  const { data: walletData, isLoading: walletLoading, refetch: refetchWallet } = useGetUserWalletQuery();
+  const { data: notificationsData, isLoading: notificationsLoading, refetch: refetchNotifications } = useGetUserNotificationsQuery({ limit: 5 });
+  const { data: installmentsData, isLoading: installmentsLoading, refetch: refetchInstallments } = useGetUserInstallmentsQuery({ limit: 5 });
+  const { data: loanStatusData, refetch: refetchLoanApplications } = useGetLoanStatusQuery();
+  const [markNotificationAsRead] = useMarkNotificationAsReadMutation();
+  const [deleteNotification] = useDeleteNotificationMutation();
+
   // Demo data for when no real applications exist
   const demoApplications = [
     {
@@ -94,7 +105,7 @@ const Dashboard = () => {
       amount: 15000,
       term: 24,
       purpose: 'Car Purchase',
-      status: 'pending' as const,
+      status: 'approved' as const,
       createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
       userId: user?.id || '',
       loanType: 'auto',
@@ -114,8 +125,15 @@ const Dashboard = () => {
     }
   ];
 
-  // Use real data if available, otherwise use demo data
-  const displayApplications = loanApplications.length > 0 ? loanApplications : demoApplications;
+  // Use fresh loan data from RTK Query, fallback to context data
+  const freshLoanApplications = loanStatusData?.data || loanApplications || [];
+  
+  // Check if user has any real applications (from API or context)
+  const hasRealApplications = (loanStatusData?.data && loanStatusData.data.length > 0) || 
+                             (loanApplications && loanApplications.length > 0);
+  
+  // Only use demo data if no real applications exist at all
+  const displayApplications = hasRealApplications ? freshLoanApplications : demoApplications;
   
   const [animatedValues, setAnimatedValues] = useState<AnimatedValues>({
     totalAmount: 0,
@@ -124,12 +142,6 @@ const Dashboard = () => {
   });
   const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState<boolean>(false);
-
-  // RTK Query hooks
-  const { data: walletData, isLoading: walletLoading, refetch: refetchWallet } = useGetUserWalletQuery();
-  const { data: notificationsData, isLoading: notificationsLoading, refetch: refetchNotifications } = useGetUserNotificationsQuery({ limit: 5 });
-  const { data: installmentsData, isLoading: installmentsLoading, refetch: refetchInstallments } = useGetUserInstallmentsQuery({ limit: 5 });
-  const [markNotificationAsRead] = useMarkNotificationAsReadMutation();
 
   // Extract data from API responses
   const wallet = walletData?.data;
@@ -198,11 +210,21 @@ const Dashboard = () => {
     );
   }, [totalLoanAmount, pendingApplications, displayApplications.length]);
 
+  // Auto-refresh loan applications every 30 seconds to catch status updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchLoanApplications();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [refetchLoanApplications]);
+
   // Refresh all dashboard data
   const refreshDashboardData = (): void => {
     refetchWallet();
     refetchNotifications();
     refetchInstallments();
+    refetchLoanApplications();
   };
 
   // Handle notification read
@@ -225,6 +247,39 @@ const handleMarkNotificationAsRead = async (notificationId: string): Promise<voi
     console.error('Error marking notification as read:', error);
     
     let errorMessage = 'Failed to mark notification as read';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    dispatch(addNotification({
+      id: Date.now().toString(),
+      type: 'error',
+      message: errorMessage,
+      duration: 3000
+    }));
+  }
+};
+
+// Handle notification delete
+const handleDeleteNotification = async (notificationId: string): Promise<void> => {
+  try {
+    const result = await deleteNotification(notificationId).unwrap();
+    
+    if (result) {
+      dispatch(addNotification({
+        id: Date.now().toString(),
+        type: 'success',
+        message: 'Notification deleted successfully',
+        duration: 2000
+      }));
+      
+      // Refetch notifications to update the UI
+      refetchNotifications();
+    }
+  } catch (error: unknown) {
+    console.error('Error deleting notification:', error);
+    
+    let errorMessage = 'Failed to delete notification';
     if (error instanceof Error) {
       errorMessage = error.message;
     }
@@ -526,9 +581,22 @@ const handleMarkNotificationAsRead = async (notificationId: string): Promise<voi
                             {format(new Date(notification.createdAt), 'MMM dd, yyyy HH:mm')}
                           </p>
                         </div>
-                        {!notification.isRead && (
-                          <div className="w-2 h-2 bg-blue-500 rounded-full ml-2 mt-1"></div>
-                        )}
+                        <div className="flex items-center space-x-2">
+                          {!notification.isRead && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteNotification(notification._id);
+                            }}
+                            className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -618,13 +686,26 @@ const handleMarkNotificationAsRead = async (notificationId: string): Promise<voi
         <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-600 delay-500">
           <Card className="border-0 shadow-lg">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-primary" />
-                <span>Your Loan Applications</span>
-              </CardTitle>
-              <CardDescription>
-                Track the status and details of your loan applications
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <span>Your Loan Applications</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Track the status and details of your loan applications
+                  </CardDescription>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={refetchLoanApplications}
+                  className="magnetic-hover"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {displayApplications.length === 0 ? (
