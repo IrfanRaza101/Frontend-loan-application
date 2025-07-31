@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+// Get API URL from environment variables
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 interface User {
   firstName?: string;
   id: string;
@@ -63,7 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -109,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const adminLogin = async (email: string, secretKey: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/admin-login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -221,7 +224,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('Not authenticated');
       }
       
-      const response = await fetch('/api/loan/apply', {
+      const response = await fetch(`${API_BASE_URL}/api/loan/apply`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -299,7 +302,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       
-      const response = await fetch('/api/loan/status', {
+      const response = await fetch(`${API_BASE_URL}/api/loan/status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },

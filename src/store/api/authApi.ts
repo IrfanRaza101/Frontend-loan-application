@@ -1,8 +1,11 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '../index';
 
+// Get API URL from environment variables
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 const baseQuery = fetchBaseQuery({
-  baseUrl: '/api/auth',
+  baseUrl: `${API_BASE_URL}/api/auth`,
   prepareHeaders: (headers, { getState }) => {
     const token = (getState() as RootState).auth.token;
     if (token) {
