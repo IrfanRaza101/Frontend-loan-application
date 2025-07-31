@@ -23,5 +23,9 @@
         }
       ]
     }
-  ]
+  ],
+  "env": {
+    "VITE_API_URL": "https://backend-loan-application.vercel.app",
+    "VITE_API_URL_PRODUCTION": "https://backend-loan-application.vercel.app"
+  }
 }
