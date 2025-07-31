@@ -101,7 +101,7 @@ const Apply = () => {
       const value = watchedValues[field as keyof LoanFormData];
       if (field === 'purpose') {
         // Purpose is complete if it has minimum 10 characters
-        return typeof value === 'string' && value.trim().length >= 10;
+        return value && value.trim().length >= 10;
       }
       return value !== '' && value !== undefined && value !== null;
     });

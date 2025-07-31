@@ -54,6 +54,7 @@ interface AnimatedValues {
   totalAmount: number;
   pendingCount: number;
   totalCount: number;
+  successRate: number;
 }
 
 interface Installment {
@@ -62,6 +63,7 @@ interface Installment {
   dueDate: string;
   status: string;
   loanId: string;
+  paidAt?: string;
 }
 
 interface Notification {
@@ -70,12 +72,24 @@ interface Notification {
   message: string;
   type: string;
   read: boolean;
+  isRead: boolean;
   createdAt: string;
 }
 
 const Dashboard = () => {
   const { user, loanApplications } = useAuth();
   const dispatch = useAppDispatch();
+  
+  // State variables
+  const [animatedValues, setAnimatedValues] = useState<AnimatedValues>({
+    totalAmount: 0,
+    pendingCount: 0,
+    totalCount: 0,
+    successRate: 0
+  });
+  const [loading, setLoading] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null);
   
   // RTK Query hooks - Define these first
   const { data: walletData, isLoading: walletLoading, refetch: refetchWallet } = useGetUserWalletQuery();
@@ -84,6 +98,39 @@ const Dashboard = () => {
   const { data: loanStatusData, refetch: refetchLoanApplications } = useGetLoanStatusQuery();
   const [markNotificationAsRead] = useMarkNotificationAsReadMutation();
   const [deleteNotification] = useDeleteNotificationMutation();
+
+  // Extract data from RTK Query responses
+  const wallet = walletData?.data;
+  const notifications: Notification[] = Array.isArray(notificationsData?.data) ? notificationsData.data : [];
+  const installments: Installment[] = Array.isArray(installmentsData?.data) ? installmentsData.data : [];
+  const unreadCount = notifications.filter(n => !n.read && !n.isRead).length;
+
+  // Helper functions
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <CheckCircle className="h-5 w-5 text-green-600" />;
+      case 'pending':
+        return <Clock className="h-5 w-5 text-yellow-600" />;
+      case 'rejected':
+        return <XCircle className="h-5 w-5 text-red-600" />;
+      default:
+        return <FileText className="h-5 w-5 text-gray-600" />;
+    }
+  };
+
+  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status) {
+      case 'approved':
+        return 'default';
+      case 'pending':
+        return 'secondary';
+      case 'rejected':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
 
   // Demo data for when no real applications exist
   const demoApplications = [
@@ -128,61 +175,26 @@ const Dashboard = () => {
   // Use fresh loan data from RTK Query, fallback to context data
   const freshLoanApplications = loanStatusData?.data || loanApplications || [];
   
-  // Check if user has any real applications (from API or context)
-  const hasRealApplications = (loanStatusData?.data && loanStatusData.data.length > 0) || 
-                             (loanApplications && loanApplications.length > 0);
+  // Check if user has any real applications (not demo data)
+  const hasRealApplications = freshLoanApplications.length > 0;
   
-  // Only use demo data if no real applications exist at all
-  const displayApplications = hasRealApplications ? freshLoanApplications : demoApplications;
+  // Only use real applications data - no demo data for new accounts
+  const displayApplications = freshLoanApplications;
   
-  const [animatedValues, setAnimatedValues] = useState<AnimatedValues>({
-    totalAmount: 0,
-    pendingCount: 0,
-    totalCount: 0
-  });
-  const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState<boolean>(false);
-
-  // Extract data from API responses
-  const wallet = walletData?.data;
-  const notifications = notificationsData?.data?.notifications || [];
-  const unreadCount = notificationsData?.data?.unreadCount || 0;
-  const installments = installmentsData?.data?.installments || [];
-  const loading = walletLoading || notificationsLoading || installmentsLoading;
-
-  const getStatusIcon = (status: string): JSX.Element => {
-    switch (status) {
-      case 'pending':
-        return <Clock className="h-4 w-4" />;
-      case 'approved':
-        return <CheckCircle className="h-4 w-4" />;
-      case 'rejected':
-        return <XCircle className="h-4 w-4" />;
-      default:
-        return <FileText className="h-4 w-4" />;
-    }
-  };
-
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" => {
-    switch (status) {
-      case 'pending':
-        return 'secondary';
-      case 'approved':
-        return 'default';
-      case 'rejected':
-        return 'destructive';
-      default:
-        return 'secondary';
-    }
-  };
-
-  const totalLoanAmount = displayApplications
-    .filter(app => app.status === 'approved')
-    .reduce((sum, app) => sum + app.amount, 0);
-
-  const pendingApplications = displayApplications.filter(app => app.status === 'pending').length;
-  const approvedApplications = displayApplications.filter(app => app.status === 'approved').length;
-  const rejectedApplications = displayApplications.filter(app => app.status === 'rejected').length;
+  // Calculate real applications data only
+  const realApplications = freshLoanApplications;
+  
+  // Calculate statistics based on real data only
+  const totalLoanAmount = realApplications.reduce((sum, app) => sum + app.amount, 0);
+  const pendingApplications = realApplications.filter(app => app.status === 'pending').length;
+  const approvedApplications = realApplications.filter(app => app.status === 'approved').length;
+  const rejectedApplications = realApplications.filter(app => app.status === 'rejected').length;
+  const totalRealApplications = realApplications.length;
+  
+  // Calculate success rate based on real data only
+  const successRate = totalRealApplications > 0 
+    ? Math.round((approvedApplications / totalRealApplications) * 100) 
+    : 0;
 
   // Animate numbers on mount
   useEffect(() => {
@@ -205,16 +217,19 @@ const Dashboard = () => {
     animateNumber(pendingApplications, (value) => 
       setAnimatedValues(prev => ({ ...prev, pendingCount: value }))
     );
-    animateNumber(displayApplications.length, (value) => 
+    animateNumber(totalRealApplications, (value) => 
       setAnimatedValues(prev => ({ ...prev, totalCount: value }))
     );
-  }, [totalLoanAmount, pendingApplications, displayApplications.length]);
+    animateNumber(successRate, (value) => 
+      setAnimatedValues(prev => ({ ...prev, successRate: value }))
+    );
+  }, [totalLoanAmount, pendingApplications, totalRealApplications, successRate]);
 
-  // Auto-refresh loan applications every 30 seconds to catch status updates
+  // Auto-refresh loan applications every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       refetchLoanApplications();
-    }, 30000); // 30 seconds
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [refetchLoanApplications]);
@@ -429,7 +444,7 @@ const handleDeleteNotification = async (notificationId: string): Promise<void> =
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-purple-700 dark:text-purple-300 neon-glow">
-                  {displayApplications.length > 0 ? Math.round((approvedApplications / displayApplications.length) * 100) : 0}%
+                  {animatedValues.successRate}%
                 </div>
                 <p className="text-xs text-purple-600 dark:text-purple-400 flex items-center mt-1">
                   <PieChart className="h-3 w-3 mr-1" />
@@ -438,55 +453,55 @@ const handleDeleteNotification = async (notificationId: string): Promise<void> =
               </CardContent>
             </Card>
           </div>
-        </div>
-
-        {/* Application Status Overview */}
-        {displayApplications.length > 0 && (
-          <div className="mb-8 animate-in fade-in-0 slide-in-from-bottom-4 duration-600 delay-300">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  <span>Application Status Overview</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="flex items-center">
-                        <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
-                        Approved ({approvedApplications})
-                      </span>
-                      <span>{displayApplications.length > 0 ? Math.round((approvedApplications / displayApplications.length) * 100) : 0}%</span>
-                    </div>
-                    <Progress value={displayApplications.length > 0 ? (approvedApplications / displayApplications.length) * 100 : 0} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="flex items-center">
-                        <Clock className="h-4 w-4 text-yellow-600 mr-2" />
-                        Pending ({pendingApplications})
-                      </span>
-                      <span>{displayApplications.length > 0 ? Math.round((pendingApplications / displayApplications.length) * 100) : 0}%</span>
-                    </div>
-                    <Progress value={displayApplications.length > 0 ? (pendingApplications / displayApplications.length) * 100 : 0} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="flex items-center">
-                        <XCircle className="h-4 w-4 text-red-600 mr-2" />
-                        Rejected ({rejectedApplications})
-                      </span>
-                      <span>{displayApplications.length > 0 ? Math.round((rejectedApplications / displayApplications.length) * 100) : 0}%</span>
-                    </div>
-                    <Progress value={displayApplications.length > 0 ? (rejectedApplications / displayApplications.length) * 100 : 0} className="h-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
-        )}
+
+          {/* Application Status Overview */}
+          {totalRealApplications > 0 && (
+            <div className="mb-8 animate-in fade-in-0 slide-in-from-bottom-4 duration-600 delay-300">
+              <Card className="border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                    <span>Application Status Overview</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="flex items-center">
+                          <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
+                          Approved ({approvedApplications})
+                        </span>
+                        <span>{totalRealApplications > 0 ? Math.round((approvedApplications / totalRealApplications) * 100) : 0}%</span>
+                      </div>
+                      <Progress value={totalRealApplications > 0 ? (approvedApplications / totalRealApplications) * 100 : 0} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="flex items-center">
+                          <Clock className="h-4 w-4 text-yellow-600 mr-2" />
+                          Pending ({pendingApplications})
+                        </span>
+                        <span>{totalRealApplications > 0 ? Math.round((pendingApplications / totalRealApplications) * 100) : 0}%</span>
+                      </div>
+                      <Progress value={totalRealApplications > 0 ? (pendingApplications / totalRealApplications) * 100 : 0} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="flex items-center">
+                          <XCircle className="h-4 w-4 text-red-600 mr-2" />
+                          Rejected ({rejectedApplications})
+                        </span>
+                        <span>{totalRealApplications > 0 ? Math.round((rejectedApplications / totalRealApplications) * 100) : 0}%</span>
+                      </div>
+                      <Progress value={totalRealApplications > 0 ? (rejectedApplications / totalRealApplications) * 100 : 0} className="h-2" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
         {/* Quick Actions */}
         <div className="mb-8 animate-in fade-in-0 slide-in-from-bottom-4 duration-600 delay-400">
@@ -741,7 +756,7 @@ const handleDeleteNotification = async (notificationId: string): Promise<void> =
                   <TabsContent value="all" className="space-y-4 mt-6">
                     {displayApplications.map((application, index) => (
                       <div
-                        key={application.id}
+                        key={application._id || application.id || `app-${index}`}
                         className="animate-in fade-in-0 slide-in-from-left-4 duration-600 hover:scale-[1.01] transition-transform"
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
@@ -844,7 +859,7 @@ const handleDeleteNotification = async (notificationId: string): Promise<void> =
                   <TabsContent value="pending" className="space-y-4 mt-6">
                     {displayApplications.filter(app => app.status === 'pending').map((application, index) => (
                       <div
-                        key={application.id}
+                        key={application._id || application.id || `pending-${index}`}
                         className="animate-in fade-in-0 slide-in-from-left-4 duration-600"
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
@@ -886,7 +901,7 @@ const handleDeleteNotification = async (notificationId: string): Promise<void> =
                   <TabsContent value="approved" className="space-y-4 mt-6">
                     {displayApplications.filter(app => app.status === 'approved').map((application, index) => (
                       <div
-                        key={application.id}
+                        key={application._id || application.id || `approved-${index}`}
                         className="animate-in fade-in-0 slide-in-from-left-4 duration-600"
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
@@ -928,7 +943,7 @@ const handleDeleteNotification = async (notificationId: string): Promise<void> =
                   <TabsContent value="rejected" className="space-y-4 mt-6">
                     {displayApplications.filter(app => app.status === 'rejected').map((application, index) => (
                       <div
-                        key={application.id}
+                        key={application._id || application.id || `rejected-${index}`}
                         className="animate-in fade-in-0 slide-in-from-left-4 duration-600"
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
