@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL_PRODUCTION || import.meta.env.
 
 const baseQuery = fetchBaseQuery({
   baseUrl: `${API_BASE_URL}/api/admin`,
+  credentials: 'include',
   prepareHeaders: (headers, { getState }) => {
     const token = (getState() as RootState).auth.token;
     if (token) {

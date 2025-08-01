@@ -32,6 +32,7 @@ const Contact = () => {
       const apiUrl = import.meta.env.VITE_API_URL_PRODUCTION || import.meta.env.VITE_API_URL || 'https://backend-loan-application.vercel.app';
       const response = await fetch(`${apiUrl}/api/contact/send-message`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },

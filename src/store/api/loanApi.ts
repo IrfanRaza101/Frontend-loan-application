@@ -106,6 +106,7 @@ export const loanApi = createApi({
   reducerPath: 'loanApi',
   baseQuery: fetchBaseQuery({
     baseUrl: `${API_BASE_URL}/api`,
+    credentials: 'include',
     prepareHeaders: (headers, { getState }) => {
       const token = (getState() as RootState).auth.token;
       if (token) {
