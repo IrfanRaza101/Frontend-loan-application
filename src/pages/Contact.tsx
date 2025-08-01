@@ -29,7 +29,7 @@ const Contact = () => {
     setIsSubmitting(true);
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL_PRODUCTION || import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const apiUrl = import.meta.env.VITE_API_URL_PRODUCTION || import.meta.env.VITE_API_URL || 'https://backend-loan-application.vercel.app';
       const response = await fetch(`${apiUrl}/api/contact/send-message`, {
         method: 'POST',
         headers: {

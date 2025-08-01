@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Get API URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL_PRODUCTION || import.meta.env.VITE_API_URL || 'https://backend-loan-application.vercel.app';
 
 // Create axios instance with default config
 const api = axios.create({
